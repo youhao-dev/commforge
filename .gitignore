@@ -1,0 +1,23 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+pytest-cache-files-*/
+.coverage
+.venv/
+data/*.db*
+logs/*.log*
+dist/
+build/
+.vscode/
+artifacts/
+PacketStudio.spec
+/CommForgeDebug.spec
+/tests/runtime/*
+!/tests/runtime/.gitkeep
+/.commforge-test-*/
+
+# 界面回归截图固定输出到 docs/images，根目录不保留临时图片。
+/qa-*.png
+/implementation-*.png
+/redesign-*.png
+/design-comparison*.png

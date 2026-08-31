@@ -1,0 +1,104 @@
+name: Build and release
+
+on:
+  push:
+    branches: [master, main]
+    tags: ["v*"]
+  pull_request:
+    branches: [master, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  build:
+    name: ${{ matrix.platform }}-${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows
+            arch: x64
+            runner: windows-2025
+          - platform: windows
+            arch: arm64
+            runner: windows-11-arm
+          - platform: linux
+            arch: x64
+            runner: ubuntu-24.04
+          - platform: linux
+            arch: arm64
+            runner: ubuntu-24.04-arm
+          - platform: macos
+            arch: x64
+            runner: macos-15-intel
+          - platform: macos
+            arch: arm64
+            runner: macos-15
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          architecture: ${{ matrix.arch }}
+          cache: pip
+
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip "pyinstaller>=6.0,<7" && python -m pip install -r requirements.txt
+
+      - name: Run tests
+        run: python -m pytest -q -p no:cacheprovider
+
+      - name: Build native application
+        run: python -m PyInstaller --noconfirm --clean CommForge.spec
+
+      - name: Read version
+        id: version
+        shell: bash
+        run: python -c "import tomllib; print('value=' + tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])" >> "$GITHUB_OUTPUT"
+
+      - name: Create ZIP and checksum
+        run: >-
+          python scripts/package_release.py
+          --platform ${{ matrix.platform }}
+          --arch ${{ matrix.arch }}
+          --version ${{ steps.version.outputs.value }}
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: CommForge-${{ matrix.platform }}-${{ matrix.arch }}
+          path: artifacts/*
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Publish GitHub release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download all packages
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Publish release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release create "$GITHUB_REF_NAME" artifacts/* --generate-notes --verify-tag

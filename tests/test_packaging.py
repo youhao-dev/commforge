@@ -11,7 +11,7 @@ from scripts.package_release import package_release
 
 def test_frozen_project_root_uses_executable_directory(monkeypatch) -> None:
     """冻结应用应把数据和日志保存在可执行文件旁边。"""
-    executable = Path("C:/Program Files/CommForge/CommForge.exe")
+    executable = (Path.cwd() / "frozen-app" / "CommForge").resolve()
     monkeypatch.setattr(paths.sys, "frozen", True, raising=False)
     monkeypatch.setattr(paths.sys, "executable", str(executable))
 
